@@ -29,12 +29,13 @@ To intialise the device, the user must create a device structure. The user can d
 
 ``` c
 si7210_status rslt = SI7210_OK;
-strut si7210_dev dev;
 
-dev.dev_id = SI7210_ADDRESS_0;
-dev.read = usr_i2c_read;
-dev.write = usr_i2c_write;
-dev.delay_ms = usr_delay_ms;
+struct si7210_dev dev = {
+  .dev_id = SI7210_ADDRESS_0;
+  .read = usr_i2c_read;
+  .write = usr_i2c_write;
+  .delay_ms = usr_delay_ms;
+};
 
 rslt = si7210_init(&dev);
 
