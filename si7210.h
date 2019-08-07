@@ -26,7 +26,7 @@ si7210_status si7210_init(struct si7210_dev *dev);
   * @return Success of operation
   * @retval si7210_status
   */
-si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_range range, int32_t *field);
+si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_range range, float *field);
 
 /*!
   * @brief This API gets the last measured temperature from the device.
@@ -38,7 +38,7 @@ si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_rang
   * @return Success of operation
   * @retval si7210_status
   */
-si7210_status si7210_get_temperature(struct si7210_dev *dev, int64_t *temperature);
+si7210_status si7210_get_temperature(struct si7210_dev *dev, float *temperature);
 
 /*!
   * @brief This API reads a register from Si7210 device.

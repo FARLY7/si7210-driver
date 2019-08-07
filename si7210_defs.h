@@ -10,6 +10,9 @@
 #define SI7210_ADDRESS_2    (0x32U << 1)
 #define SI7210_ADDRESS_3    (0x33U << 1)
 
+/* Vdd of SI7210. This is used in device's self-test calculations */
+#define SI7210_VDD          (3.3f)
+
 /*!
  * @brief Si7210 API status result code
  */
@@ -20,7 +23,8 @@ typedef enum {
     SI7210_E_NULL_PTR,
     SI7210_E_IO,
     SI7210_E_DEV_NOT_FOUND,
-    SI7210_E_INVALID_RANGE
+    SI7210_E_INVALID_RANGE,
+    SI7210_E_SELF_TEST_FAIL
     /* API Warning codes */
 } si7210_status;
 

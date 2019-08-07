@@ -1,5 +1,6 @@
 /* Header includes */
 #include "si7210.h"
+#include <math.h>
 #include <stddef.h>
 
 /* Si7210 Register addresses */
@@ -120,7 +121,7 @@ error:
   * @brief This API gets the last measured field strength from the device.
   *        The value is correctly compensated.
   */
-si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_range range, int32_t *field)
+si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_range range, float *field)
 {
     /* Temp variable used for register read values */
     uint8_t val = 0;
@@ -172,11 +173,14 @@ si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_rang
     }
 
     /* Use a burst size of 4 samples in FIR and IIR modes */
-    si7210_write_reg(dev, SI72XX_CTRL4, 0, DF_BURSTSIZE_4 | DF_BW_4);
+    //si7210_write_reg(dev, SI72XX_CTRL4, 0, DF_BURSTSIZE_4 | DF_BW_4);
+    si7210_write_reg(dev, SI72XX_CTRL4, 0, DF_BURSTSIZE_128 | DF_BW_4096);
+
 
     /* Selet field strength measurement */
     si7210_write_reg(dev, SI72XX_DSPSIGSEL, 0, DSP_SIGSEL_FIELD_MASK);
     
+
     /* Start measurement */
     si7210_write_reg(dev, SI72XX_POWER_CTRL, 0xF0, USESTORE_MASK | ONEBURST_MASK);
     
@@ -185,21 +189,44 @@ si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_rang
         /* Read most-significant byte */
         si7210_read_reg(dev, SI72XX_DSPSIGM, &val);
     } while( (val & DSP_SIGM_DATA_FLAG) == 0);
-        
-    int32_t raw_field = (val & DSP_SIGM_DATA_MASK) << 8;
+    
+    /* ================================================= */
+    /* ================================================= */
+
+    int32_t value = 256 * (val & DSP_SIGM_DATA_MASK);
 
     /* Read least-significant byte of data */
     si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
         
-    raw_field += val;
-    raw_field -= 16384U;
+    value += val;
+    value -= 16384U;
+
+    float raw_field = (float) value;
 
     if(range == SI7210_20mT)
-        *field = (raw_field / 4) + raw_field; /* rawField * 1.25 */
+        *field = raw_field * 0.00125; /* rawField * 1.25 */
     else if(range == SI7210_200mT)
-        *field = (raw_field * 12) + (raw_field / 2); /* rawField * 12.5 */
+        *field = raw_field * 0.0125; /* rawField * 12.5 */
     else
         rslt = SI7210_E_INVALID_RANGE;
+
+    /* ================================================== */
+    /* ================================================== */
+
+    // int32_t raw_field = (val & DSP_SIGM_DATA_MASK) << 8;
+
+    // /* Read least-significant byte of data */
+    // si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
+        
+    // raw_field += val;
+    // raw_field -= 16384U;
+
+    // if(range == SI7210_20mT)
+    //     *field = (raw_field / 4) + raw_field; /* rawField * 1.25 */
+    // else if(range == SI7210_200mT)
+    //     *field = (raw_field * 12) + (raw_field / 2); /* rawField * 12.5 */
+    // else
+    //     rslt = SI7210_E_INVALID_RANGE;
 
 //    si7210_sleep(dev);
 
@@ -211,7 +238,7 @@ error:
   * @brief This API gets the last measured temperature from the device.
   *        The value is correctly compensated.
   */
-si7210_status si7210_get_temperature(struct si7210_dev *dev, int64_t *temperature)
+si7210_status si7210_get_temperature(struct si7210_dev *dev, float *temperature)
 {
     /* Temp variable used for register read values */
     uint8_t val = 0;
@@ -244,13 +271,23 @@ si7210_status si7210_get_temperature(struct si7210_dev *dev, int64_t *temperatur
         si7210_read_reg(dev, SI72XX_DSPSIGM, &val);
     } while( (val & DSP_SIGM_DATA_FLAG) == 0);
 
-    int32_t raw_temp = 32 * (val & DSP_SIGM_DATA_MASK);
+    /* ====================================== */
+    //uint16_t value = (val & 0xFF) << 8; 
+    //si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
+    //value += (val >> 8) & 0xFF;
+    /* ====================================== */
+
+    /*! For calculations below, refer to Si7210 datasheet. */
+    int32_t value = 32 * (val & DSP_SIGM_DATA_MASK);
     
     /* Read the least-significant byte */
     si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
-    raw_temp += (val >> 3);
+    value += (val >> 3);
 
-    /* CHECK THE CALCULATIONS ABOVE */
+    /* Convert from 12-bit signed to 32-bit signed value */
+    //value = (value >> 11) == 0 ? value : -1 ^ 0xFFF | value;
+
+    //Log_info("value: %d", value);
 
     /* If no offset and gain values exist, read them now. */
     if (dev->calib_data.temp_offset == 0 && dev->calib_data.temp_gain == 0)
@@ -258,28 +295,25 @@ si7210_status si7210_get_temperature(struct si7210_dev *dev, int64_t *temperatur
         /* Read out compensation values */
         si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x1DU);
         si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t *)&dev->calib_data.temp_offset);
+        si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t*) &dev->calib_data.temp_offset);
 
         si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x1EU);
         si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t *)&dev->calib_data.temp_gain);
+        si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t*) &dev->calib_data.temp_gain);
     }
 
-    /* We operate on 11 fractional bits */
-    int offset;
+    /* =============================================== */
+    //float temp_c = (float)((value & ~0x8000) >> 3);
+    float temp_c = (float) value;
 
-    int64_t temp = 0;
-    temp = ((int64_t) raw_temp * (int64_t) raw_temp) * (-21) / 10000;
-    temp += ((1522 * raw_temp) / 10);
-    temp -= 273000;
+    float offset = dev->calib_data.temp_offset / 16.0;
+    float gain = 1 + (dev->calib_data.temp_gain / 2048.0);
+    
+    temp_c = gain * (-3.83e-6F * temp_c * temp_c + 0.16094F * temp_c - 279.80F - 0.222F * 3.3F) + offset;
 
-    // offset = val@0x1D / 16 = val@0x1D / 2048 * 128
-    offset = (int32_t)dev->calib_data.temp_offset * 1000 / 16;
-    // gain = 1 + val@0x1E
-    // temperature = raw * gain + offset
-    temp = temp + (temp * dev->calib_data.temp_gain / 2048) + offset;
+    *temperature = roundf(temp_c);
 
-    *temperature = temp;
+     //Log_info("Value: %d\tTemp: %.1f*C", value, temp_c);
 
 error:
     return rslt;
@@ -412,6 +446,51 @@ si7210_status si7210_wakeup(struct si7210_dev *dev)
 
     if((rslt = dev->read(dev->dev_id, 0, &temp, 1)) != SI7210_OK)
         goto error;
+
+error:
+    return rslt;
+}
+
+
+si7210_status si7210_self_test(struct si7210_dev *dev)
+{
+    float field_pos, field_neg;
+    si7210_status rslt;
+
+    /* Check for null pointer in device structure */
+    if((rslt = null_ptr_check(dev)) != SI7210_OK)
+        goto error;
+
+    /* Enable test field generator coil in POSITIVE direction. */
+    si7210_write_reg(dev, SI72XX_TM_FG, 0, 1);
+
+    /* Measure field strength */
+    si7210_get_field_strength(dev, SI7210_200mT, &field_pos);
+
+    /* Enable test field generator coil in POSITIVE direction. */
+    si7210_write_reg(dev, SI72XX_TM_FG, 0, 2);
+
+    /* Measure field strength */
+    si7210_get_field_strength(dev, SI7210_200mT, &field_neg);
+
+    /* Disable test field generator coil. */
+    si7210_write_reg(dev, SI72XX_TM_FG, 0, 0);
+
+    Log_info("Pos: %fmT\tNeg: %fmT", field_pos, field_neg);
+
+    float b_out = 1.16 * SI7210_VDD;
+    float b_upper = b_out + (b_out * 0.25);
+    float b_lower = b_out - (b_out * 0.25);
+
+    if( (field_pos <= b_upper) && (field_pos >= b_lower) &&
+        (field_neg <= b_upper) && (field_neg >= b_lower) )
+    {
+        rslt = SI7210_OK;
+    }
+    else
+    {
+        rslt = SI7210_E_SELF_TEST_FAIL;
+    }
 
 error:
     return rslt;
