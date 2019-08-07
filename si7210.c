@@ -1,6 +1,5 @@
 /* Header includes */
 #include "si7210.h"
-#include <math.h>
 #include <stddef.h>
 
 /* Si7210 Register addresses */
@@ -108,9 +107,11 @@ si7210_status si7210_init(struct si7210_dev *dev)
         if((rslt = si7210_check(dev)) == SI7210_OK)
             break;
 
-        /* Wait for 1ms and count unsuccessful attempts */
-        dev->delay_ms(1);
+        /* Wait for 10ms and count unsuccessful attempts */
+        dev->delay_ms(500);
         try_count--;
+
+        Log_info("Retry %d", try_count);
     }
 
 error:
@@ -272,9 +273,9 @@ si7210_status si7210_get_temperature(struct si7210_dev *dev, float *temperature)
     } while( (val & DSP_SIGM_DATA_FLAG) == 0);
 
     /* ====================================== */
-    //uint16_t value = (val & 0xFF) << 8; 
-    //si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
-    //value += (val >> 8) & 0xFF;
+    // uint16_t value = (val & 0xFF) << 8; 
+    // si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
+    // value += val & 0xFF;
     /* ====================================== */
 
     /*! For calculations below, refer to Si7210 datasheet. */
@@ -286,8 +287,6 @@ si7210_status si7210_get_temperature(struct si7210_dev *dev, float *temperature)
 
     /* Convert from 12-bit signed to 32-bit signed value */
     //value = (value >> 11) == 0 ? value : -1 ^ 0xFFF | value;
-
-    //Log_info("value: %d", value);
 
     /* If no offset and gain values exist, read them now. */
     if (dev->calib_data.temp_offset == 0 && dev->calib_data.temp_gain == 0)
@@ -311,9 +310,7 @@ si7210_status si7210_get_temperature(struct si7210_dev *dev, float *temperature)
     
     temp_c = gain * (-3.83e-6F * temp_c * temp_c + 0.16094F * temp_c - 279.80F - 0.222F * 3.3F) + offset;
 
-    *temperature = roundf(temp_c);
-
-     //Log_info("Value: %d\tTemp: %.1f*C", value, temp_c);
+    *temperature = temp_c;
 
 error:
     return rslt;
@@ -424,8 +421,7 @@ si7210_status si7210_sleep(struct si7210_dev *dev)
     if((rslt = si7210_read_reg(dev, SI72XX_POWER_CTRL, &temp)) != SI7210_OK)
         goto error;
     
-    temp = (temp & 0xF8U) | 0x01; /* Clear STOP and set SL
-    EEP bits */
+    temp = (temp & 0xF8U) | 0x01; /* Clear STOP and set SLEEP bits */
     
     /* Write back POWER_CTRL register value */
     if((rslt = si7210_write_reg(dev, SI72XX_POWER_CTRL, 0, temp)) != SI7210_OK)
@@ -437,16 +433,18 @@ error:
 
 si7210_status si7210_wakeup(struct si7210_dev *dev)
 {
-    uint8_t temp;
+    uint8_t temp = 0;
     si7210_status rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
         goto error;
 
-    if((rslt = dev->read(dev->dev_id, 0, &temp, 1)) != SI7210_OK)
-        goto error;
-
+    /* Wake the device up by sending a WRITE request. 
+     * API call will fail as we are unable to write to memory address 0x00,
+     * however it will wake the part up. */
+    dev->write(dev->dev_id, 0x00, &temp, 1);
+        
 error:
     return rslt;
 }
@@ -476,14 +474,14 @@ si7210_status si7210_self_test(struct si7210_dev *dev)
     /* Disable test field generator coil. */
     si7210_write_reg(dev, SI72XX_TM_FG, 0, 0);
 
-    Log_info("Pos: %fmT\tNeg: %fmT", field_pos, field_neg);
-
     float b_out = 1.16 * SI7210_VDD;
-    float b_upper = b_out + (b_out * 0.25);
-    float b_lower = b_out - (b_out * 0.25);
+    float b_upper = b_out + (b_out * 0.25); /* +25% */
+    float b_lower = b_out - (b_out * 0.25); /* -25% */
 
-    if( (field_pos <= b_upper) && (field_pos >= b_lower) &&
-        (field_neg <= b_upper) && (field_neg >= b_lower) )
+    if( (field_pos <= b_upper) &&
+        (field_pos >= b_lower) &&
+        (field_neg >= (b_upper * -1)) &&
+        (field_neg <= (b_lower * -1)))
     {
         rslt = SI7210_OK;
     }
