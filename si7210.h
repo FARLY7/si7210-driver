@@ -1,10 +1,49 @@
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Sean Farrelly
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+ * File        si7210.h
+ * Created by  Sean Farrelly
+ * Version     1.0
+ * 
+ */
+
+/*! @file si7210.h
+ * @brief Driver for Si7210 Hall-effect sensor.
+ */
+
+/*!
+ * @defgroup SI7210 Sensor API
+ */
 #ifndef _SI7210_H_
 #define _SI7210_H_
 
-/* Header includes */
-#include "si7210_defs.h"
-#include <stdint.h>
+/*! CPP guard */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+#include <stdint.h>
+#include "si7210_defs.h"
 
 /**
   * @brief  Initialise Si7210 device and check if responding
@@ -14,7 +53,7 @@
   * @return result of API execution status
   * @retval si7210_status
   */
-si7210_status si7210_init(struct si7210_dev *dev);
+si7210_status_t si7210_init(struct si7210_dev *dev);
 
 /*!
   * @brief This API gets the last measured field strength from the device.
@@ -26,7 +65,7 @@ si7210_status si7210_init(struct si7210_dev *dev);
   * @return Success of operation
   * @retval si7210_status
   */
-si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_range range, float *field);
+si7210_status_t si7210_get_field_strength(struct si7210_dev *dev, si7210_range_t range, float *field);
 
 /*!
   * @brief This API gets the last measured temperature from the device.
@@ -38,12 +77,28 @@ si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_rang
   * @return Success of operation
   * @retval si7210_status
   */
-si7210_status si7210_get_temperature(struct si7210_dev *dev, float *temperature);
+si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperature);
 
 
 
-void si7210_irq_handler(struct si7210_dev *dev);
-si7210_status si7210_set_threshold(struct si7210_dev *dev, float threshold, enum si7210_output_pin pin);
+/*!
+  * @brief This API sets the threshold triggering of the device.
+  *        Whereby, the output pin of the device will trigger when the magnetic
+  *        field exceeds a particular threshold.
+  * 
+  * @note The user must inlude the si7210_irq_handler function call inside the
+  *       ISR of the GPIO receiving the output pin, and pass the sensor context.
+  * 
+  * @param[in] dev       : Si7210 device structure.
+  * @param[in] threshold : Value at which to set the treshold.
+  * @param[in] range     : Range of value (20mT or 200mT).
+  * @param[in] pin       : State of output pin when field reading exceeds threshold.
+  * @param[out] data : Pointer to where register value is to be stored.
+  *  
+  * @return Success of read operation.
+  * @retval si7210_status
+  */
+si7210_status_t si7210_set_threshold(struct si7210_dev *dev, float threshold, si7210_range_t range, si7210_output_pin_t pin_state);
 
 /*!
   * @brief This API reads a register from Si7210 device.
@@ -55,7 +110,7 @@ si7210_status si7210_set_threshold(struct si7210_dev *dev, float threshold, enum
   * @return Success of read operation.
   * @retval si7210_status
   */
-si7210_status si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *val);
+si7210_status_t si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *val);
 
 /*!
   * @brief This API writes a value to a register of Si7210 device.
@@ -68,7 +123,7 @@ si7210_status si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *val)
   * @return Success of write operation.
   * @retval si7210_status
   */
-si7210_status si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t mask, uint8_t val);
+si7210_status_t si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t mask, uint8_t val);
 
 /*!
   * @brief This API checks if the device is responding.
@@ -78,7 +133,7 @@ si7210_status si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t mask
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status si7210_check(struct si7210_dev *dev);
+si7210_status_t si7210_check(struct si7210_dev *dev);
 
 /*!
   * @brief This API executes a self-test sequence offered by the device.
@@ -93,7 +148,7 @@ si7210_status si7210_check(struct si7210_dev *dev);
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status si7210_self_test(struct si7210_dev *dev);
+si7210_status_t si7210_self_test(struct si7210_dev *dev);
 
 /*!
   * @brief This API puts the device into SLEEP mode.
@@ -103,7 +158,7 @@ si7210_status si7210_self_test(struct si7210_dev *dev);
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status si7210_sleep(struct si7210_dev *dev);
+si7210_status_t si7210_sleep(struct si7210_dev *dev);
 
 /*!
   * @brief This API wakes the device from SLEEP mode.
@@ -115,6 +170,22 @@ si7210_status si7210_sleep(struct si7210_dev *dev);
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status si7210_wakeup(struct si7210_dev *dev);
+si7210_status_t si7210_wakeup(struct si7210_dev *dev);
 
-#endif
+/*!
+  * @brief This API should be called inside the ISR capturing the triggering
+  *        of the device's output pin.
+  *        This is required to support threshold trigger functionality.
+  * 
+  * @param[in] dev : Si7210 device structure.
+  * 
+  * @return void
+  */
+void si7210_irq_handler(struct si7210_dev *dev);
+
+
+#ifdef __cplusplus
+}
+#endif /* End of CPP guard */
+#endif /* SI7210_H_ */
+/** @}*/

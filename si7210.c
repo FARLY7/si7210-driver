@@ -1,4 +1,35 @@
-/* Header includes */
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Sean Farrelly
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+ * File        si7210.c
+ * Created by  Sean Farrelly
+ * Version     1.0
+ * 
+ */
+
+/*! @file si7210.c
+ * @brief Driver for Si7210 Hall-effect sensor.
+ */
 #include "si7210.h"
 #include <stddef.h>
 #include <math.h>
@@ -87,14 +118,14 @@
  * @return Result of API execution status
  * @retval SI7210_OK -> Success / SI7210_E_NULL_PTR -> Error
  */
-static si7210_status null_ptr_check(const struct si7210_dev *dev);
+static si7210_status_t null_ptr_check(const struct si7210_dev *dev);
 
 /**
   * @brief  Initialise Si7210 device and check if responding
   */
-si7210_status si7210_init(struct si7210_dev *dev)
+si7210_status_t si7210_init(struct si7210_dev *dev)
 {
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     uint8_t try_count = 5;
 
@@ -121,12 +152,12 @@ error:
   * @brief This API gets the last measured field strength from the device.
   *        The value is correctly compensated.
   */
-si7210_status si7210_get_field_strength(struct si7210_dev *dev, enum si7210_range range, float *field)
+si7210_status_t si7210_get_field_strength(struct si7210_dev *dev, si7210_range_t range, float *field)
 {
     /* Temp variable used for register read values */
     uint8_t val = 0;
 
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
@@ -213,12 +244,12 @@ error:
   * @brief This API gets the last measured temperature from the device.
   *        The value is correctly compensated.
   */
-si7210_status si7210_get_temperature(struct si7210_dev *dev, float *temperature)
+si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperature)
 {
     /* Temp variable used for register read values */
     uint8_t val = 0;
 
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
@@ -277,16 +308,22 @@ error:
     return rslt;
 }
 
-si7210_status si7210_set_threshold(struct si7210_dev *dev, float threshold, enum si7210_range range, enum si7210_output_pin pin)
+
+/*!
+  * @brief This API sets the threshold triggering of the device.
+  *        Whereby, the output pin of the device will trigger when the magnetic
+  *        field exceeds a particular threshold.
+  */
+si7210_status_t si7210_set_threshold(struct si7210_dev *dev, float threshold, si7210_range_t range, si7210_output_pin_t pin_state)
 {
-    si7210_status rslt;
-    uint8_t temp = 0;
+    si7210_status_t rslt;
+    uint8_t ctrl1 = 0;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
         goto error;
     
-    if((pin != SI7210_OUTPUT_PIN_HIGH) && (pin != SI7210_OUTPUT_PIN_LOW) &&
+    if((pin_state != SI7210_OUTPUT_PIN_HIGH) && (pin_state != SI7210_OUTPUT_PIN_LOW) &&
        (range != SI7210_200mT) && (range != SI7210_20mT))
     {
         rslt = SI7210_E_INVALID_ARG;
@@ -305,10 +342,10 @@ si7210_status si7210_set_threshold(struct si7210_dev *dev, float threshold, enum
 
     /* Set sw_low4field bit if output pin is in LOW configuration.
      * Clear sw_low4field bit if output is in HIGH configuration.*/
-    switch(pin)
+    switch(pin_state)
     {
-        case SI7210_OUTPUT_PIN_LOW:  temp |= SW_LOW4FIELD_MASK;  break;
-        case SI7210_OUTPUT_PIN_HIGH: temp &= ~SW_LOW4FIELD_MASK; break;
+        case SI7210_OUTPUT_PIN_LOW:  ctrl1 |= SW_LOW4FIELD_MASK;  break;
+        case SI7210_OUTPUT_PIN_HIGH: ctrl1 &= ~SW_LOW4FIELD_MASK; break;
     }
 
     switch(range)
@@ -337,14 +374,13 @@ si7210_status si7210_set_threshold(struct si7210_dev *dev, float threshold, enum
     uint8_t sw_op_3_0 = (uint8_t) threshold;
     uint8_t sw_op_6_4 = divides;
 
-
-
+    ctrl1 |= (sw_op_3_0 & 0x0F) << 0;
+    ctrl1 |= (sw_op_6_4 & 0x07) << 4;
 
     // Set SW_OP and SW_LOW4FIELD
-    if((rslt = si7210_write_reg(dev, SI72XX_CTRL1, 0, TEMP)) != SI7210_OK)
-        goto error;
+    if((rslt = si7210_write_reg(dev, SI72XX_CTRL1, 0, ctrl1)) != SI7210_OK)
+       goto error;
     
-
 error:
     return rslt;
 }
@@ -357,9 +393,9 @@ void si7210_irq_handler(struct si7210_dev *dev)
 /*!
   * @brief This API reads a register from Si7210 device.
   */
-si7210_status si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *val)
+si7210_status_t si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *val)
 {
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
@@ -376,9 +412,9 @@ error:
 /*!
   * @brief This API writes a value to a register of Si7210 device.
   */
-si7210_status si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t mask, uint8_t val)
+si7210_status_t si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t mask, uint8_t val)
 {
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     uint8_t temp_val = 0;
 
@@ -410,9 +446,9 @@ error:
 /*!
   * @brief This API checks the device is responding to commands.
   */
-si7210_status si7210_check(struct si7210_dev *dev)
+si7210_status_t si7210_check(struct si7210_dev *dev)
 {
-    si7210_status rslt = SI7210_OK;
+    si7210_status_t rslt = SI7210_OK;
     uint8_t temp;
 
     /* Check for null pointer in device structure */
@@ -430,11 +466,11 @@ error:
 /*!
   * @brief This API puts the device into SLEEP mode.
  */
-si7210_status si7210_sleep(struct si7210_dev *dev)
+si7210_status_t si7210_sleep(struct si7210_dev *dev)
 {
     uint8_t temp;
 
-    si7210_status rslt;
+    si7210_status_t rslt;
     
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
@@ -467,10 +503,10 @@ error:
 /*!
  * @brief This API wakes the device from SLEEP mode.
  */ 
-si7210_status si7210_wakeup(struct si7210_dev *dev)
+si7210_status_t si7210_wakeup(struct si7210_dev *dev)
 {
     uint8_t temp = 0;
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
@@ -489,10 +525,10 @@ error:
  * @brief This API executes a self-test sequence offered by the device.
  *        It uses an internal coil to generate and test the + and - field.
  */
-si7210_status si7210_self_test(struct si7210_dev *dev)
+si7210_status_t si7210_self_test(struct si7210_dev *dev)
 {
     float field_pos, field_neg;
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
@@ -538,9 +574,9 @@ error:
  * @brief This internal API is used to validate the device pointer for
  * null conditions.
  */
-static si7210_status null_ptr_check(const struct si7210_dev *dev)
+static si7210_status_t null_ptr_check(const struct si7210_dev *dev)
 {
-    si7210_status rslt;
+    si7210_status_t rslt;
 
     if (dev == NULL || dev->read == NULL || dev->write == NULL)
     {
