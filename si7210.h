@@ -46,14 +46,34 @@ extern "C" {
 #include "si7210_defs.h"
 
 /**
-  * @brief  Initialise Si7210 device and check if responding
+  * @brief This API initialises the device and checks if responding.
   * 
   * @param[in] dev : Si7210 device structure
   * 
   * @return result of API execution status
   * @retval si7210_status
   */
-si7210_status_t si7210_init(struct si7210_dev *dev);
+si7210_status_t si7210_init(si7210_dev_t *dev);
+
+/**
+  * @brief This API de-initialises the device and puts it to sleep mode.
+  * 
+  * @param[in] dev : Si7210 device structure
+  * 
+  * @return result of API execution status
+  * @retval si7210_status
+  */
+si7210_status_t si7210_deinit(si7210_dev_t *dev);
+
+/**
+  * @brief This API changes settings of the device and internal driver.
+  * 
+  * @param[in] dev : Si7210 device structure
+  * 
+  * @return result of API execution status
+  * @retval si7210_status
+  */
+si7210_status_t si7210_set_sensor_settings(si7210_dev_t *dev);
 
 /*!
   * @brief This API gets the last measured field strength from the device.
@@ -65,7 +85,7 @@ si7210_status_t si7210_init(struct si7210_dev *dev);
   * @return Success of operation
   * @retval si7210_status
   */
-si7210_status_t si7210_get_field_strength(struct si7210_dev *dev, si7210_range_t range, float *field);
+si7210_status_t si7210_get_field_strength(si7210_dev_t *dev, si7210_range_t range, float *field);
 
 /*!
   * @brief This API gets the last measured temperature from the device.
@@ -77,9 +97,7 @@ si7210_status_t si7210_get_field_strength(struct si7210_dev *dev, si7210_range_t
   * @return Success of operation
   * @retval si7210_status
   */
-si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperature);
-
-
+si7210_status_t si7210_get_temperature(si7210_dev_t *dev, float *temperature);
 
 /*!
   * @brief This API sets the threshold triggering of the device.
@@ -98,7 +116,18 @@ si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperatur
   * @return Success of read operation.
   * @retval si7210_status
   */
-si7210_status_t si7210_set_threshold(struct si7210_dev *dev, float threshold, si7210_range_t range, si7210_output_pin_t pin_state);
+si7210_status_t si7210_set_threshold(si7210_dev_t *dev, float threshold, si7210_range_t range, si7210_output_pin_t pin_state);
+
+/*!
+  * @brief This API puts the device into it's independant sleep/idle/measurement cycle,
+  *        where it will trigger the output pin when a threshold is detected.
+  * 
+  * @param[in]  dev         : Si7210 device structure.
+  *  
+  * @return Success of operation
+  * @retval si7210_status
+  */
+si7210_status_t si7210_start_periodic_measurement(si7210_dev_t *dev);
 
 /*!
   * @brief This API reads a register from Si7210 device.
@@ -110,7 +139,7 @@ si7210_status_t si7210_set_threshold(struct si7210_dev *dev, float threshold, si
   * @return Success of read operation.
   * @retval si7210_status
   */
-si7210_status_t si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *val);
+si7210_status_t si7210_read_reg(si7210_dev_t *dev, uint8_t reg, uint8_t *val);
 
 /*!
   * @brief This API writes a value to a register of Si7210 device.
@@ -123,7 +152,7 @@ si7210_status_t si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *va
   * @return Success of write operation.
   * @retval si7210_status
   */
-si7210_status_t si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t mask, uint8_t val);
+si7210_status_t si7210_write_reg(si7210_dev_t *dev, uint8_t reg, uint8_t mask, uint8_t val);
 
 /*!
   * @brief This API checks if the device is responding.
@@ -133,7 +162,7 @@ si7210_status_t si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t ma
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status_t si7210_check(struct si7210_dev *dev);
+si7210_status_t si7210_check(si7210_dev_t *dev);
 
 /*!
   * @brief This API executes a self-test sequence offered by the device.
@@ -148,7 +177,7 @@ si7210_status_t si7210_check(struct si7210_dev *dev);
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status_t si7210_self_test(struct si7210_dev *dev);
+si7210_status_t si7210_self_test(si7210_dev_t *dev);
 
 /*!
   * @brief This API puts the device into SLEEP mode.
@@ -158,7 +187,7 @@ si7210_status_t si7210_self_test(struct si7210_dev *dev);
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status_t si7210_sleep(struct si7210_dev *dev);
+si7210_status_t si7210_sleep(si7210_dev_t *dev);
 
 /*!
   * @brief This API wakes the device from SLEEP mode.
@@ -170,7 +199,7 @@ si7210_status_t si7210_sleep(struct si7210_dev *dev);
   * @return Success of operation.
   * @retval si7210_status
   */
-si7210_status_t si7210_wakeup(struct si7210_dev *dev);
+si7210_status_t si7210_wakeup(si7210_dev_t *dev);
 
 /*!
   * @brief This API should be called inside the ISR capturing the triggering
@@ -181,7 +210,7 @@ si7210_status_t si7210_wakeup(struct si7210_dev *dev);
   * 
   * @return void
   */
-void si7210_irq_handler(struct si7210_dev *dev);
+void si7210_irq_handler(si7210_dev_t *dev);
 
 
 #ifdef __cplusplus

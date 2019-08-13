@@ -118,21 +118,24 @@
  * @return Result of API execution status
  * @retval SI7210_OK -> Success / SI7210_E_NULL_PTR -> Error
  */
-static si7210_status_t null_ptr_check(const struct si7210_dev *dev);
+static si7210_status_t null_ptr_check(const si7210_dev_t *dev);
 
 /**
-  * @brief  Initialise Si7210 device and check if responding
+  * @brief This API initialises the device and checks if responding.
   */
-si7210_status_t si7210_init(struct si7210_dev *dev)
+si7210_status_t si7210_init(si7210_dev_t *dev)
 {
     si7210_status_t rslt;
 
-    uint8_t try_count = 5;
-
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
 
+    /* Wake device up incase it is sleeping. */
+    if((rslt = si7210_wakeup(dev)) != SI7210_OK)
+        return rslt;
+
+    uint8_t try_count = 5;
     while(try_count)
     {
         /* Check if device is responding */
@@ -144,7 +147,46 @@ si7210_status_t si7210_init(struct si7210_dev *dev)
         try_count--;
     }
 
-error:
+    /* Error: Timeout / device not found */
+    if(rslt != SI7210_OK)
+        return SI7210_E_DEV_NOT_FOUND;
+
+    /* Set device and internal driver settings */
+    if((rslt = si7210_set_sensor_settings(dev)) != SI7210_OK)
+        return rslt;
+    
+    /* Disable periodic auto-wakeup by device, and tamper detect. */
+    if((rslt !=si7210_write_reg(dev, SI72XX_CTRL3, ~SL_TIMEENA_MASK, 0) != SI7210_OK)
+        return rslt;
+    //rslt = si7210_write_reg(dev, SI72XX_CTRL3, SL_FAST_MASK, 0);
+        
+    return rslt;
+}
+
+/**
+  * @brief This API de-initialises the device and puts it to sleep mode.
+  */
+si7210_status_t si7210_deinit(si7210_dev_t *dev)
+{
+    si7210_status_t rslt;
+
+    /* Check for null pointer in device structure */
+    if((rslt = null_ptr_check(dev)) != SI7210_OK)
+        return rslt;
+
+    /* Disable sleep timer */
+    rslt |= si7210_write_reg(dev, SI72XX_CTRL3, ~SL_TIMEENA_MASK, 0);
+
+    /* Put device into sleep mode with no measurements (sleep timer disabled) */
+    //rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, ~(SLEEP_MASK | STOP_MASK), SLEEP_MASK);
+
+    /* Disable user store of values, and enter sleep mode with no measurements */
+    rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK, SLEEP_MASK);
+
+
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
+
     return rslt;
 }
 
@@ -152,68 +194,134 @@ error:
   * @brief This API gets the last measured field strength from the device.
   *        The value is correctly compensated.
   */
-si7210_status_t si7210_get_field_strength(struct si7210_dev *dev, si7210_range_t range, float *field)
+si7210_status_t si7210_get_field_strength(si7210_dev_t *dev, si7210_range_t range, si7210_compensation_t comp, float *field)
 {
+    si7210_status_t rslt;
     /* Temp variable used for register read values */
     uint8_t val = 0;
 
-    si7210_status_t rslt;
-
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
    
-    /* Stop the control loop by setting stop bit */
-    si7210_write_reg(dev, SI72XX_POWER_CTRL, 0xF0, USESTORE_MASK | STOP_MASK);
+    rslt = si7210_read_reg(dev, SI72XX_POWER_CTRL, &val);
 
+    /* Stop the control loop by setting stop bit */
+    if((rslt = si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK | USESTORE_MASK, STOP_MASK)) != SI7210_OK) /* WARNING: Removed USE_STORE MASK */
+        return rslt;
+
+    /* WARNING Change for Neodymium compensation values ##################################### */
     if (range == SI7210_200mT)
     {
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x27U);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
-        si7210_write_reg(dev, SI72XX_A0, 0, val);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x33U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A0, 0, val);
 
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x28U);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
-        si7210_write_reg(dev, SI72XX_A1, 0, val);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x34U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A1, 0, val);
         
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x29U);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
-        si7210_write_reg(dev, SI72XX_A2, 0, val);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x35U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A2, 0, val);
         
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x2AU);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
-        si7210_write_reg(dev, SI72XX_A3, 0, val);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x36U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A3, 0, val);
         
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x2BU);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
-        si7210_write_reg(dev, SI72XX_A4, 0, val);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x37U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A4, 0, val);
         
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x2CU);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
-        si7210_write_reg(dev, SI72XX_A5, 0, val);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x38U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A5, 0, val);
+    }
+    else if(range == SI7210_20mT)
+    {
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x2DU);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A0, 0, val);
+
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x2EU);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A1, 0, val);
+        
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x2FU);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A2, 0, val);
+        
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x30U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A3, 0, val);
+        
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x31U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A4, 0, val);
+        
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x32U);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+        rslt |= si7210_write_reg(dev, SI72XX_A5, 0, val);
     }
 
-    /* Use a burst size of 4 samples in FIR and IIR modes */
-    //si7210_write_reg(dev, SI72XX_CTRL4, 0, DF_BURSTSIZE_4 | DF_BW_4);
-    si7210_write_reg(dev, SI72XX_CTRL4, 0, DF_BURSTSIZE_128 | DF_BW_4096);
+    /* Error loading OTP values */
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
+
+
+    rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x0CU);
+    rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+    rslt |= si7210_read_reg (dev, SI72XX_OTP_DATA, &val);
+
+    rslt |= si7210_read_reg (dev, SI72XX_CTRL4, &val);
+    /* Use a burst size of 128/4096 samples in FIR and IIR modes */
+    rslt |= si7210_write_reg(dev, SI72XX_CTRL4, 0, DF_BURSTSIZE_128 | DF_BW_4096);
+    rslt |= si7210_read_reg (dev, SI72XX_CTRL4, &val);
+
 
     /* Selet field strength measurement */
-    si7210_write_reg(dev, SI72XX_DSPSIGSEL, 0, DSP_SIGSEL_FIELD_MASK);    
+    rslt |= si7210_write_reg(dev, SI72XX_DSPSIGSEL, 0, DSP_SIGSEL_FIELD_MASK);
 
     /* Start measurement */
-    si7210_write_reg(dev, SI72XX_POWER_CTRL, 0xF0, USESTORE_MASK | ONEBURST_MASK);
-    
+    rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK | USESTORE_MASK, ONEBURST_MASK);
+
+    /* Error configuring and starting measurement. */
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
+
     /* Wait until measurement complete by checking fresh data bit */
-    do {
+    uint8_t retries = 5;
+    while(retries)
+    {
         /* Read most-significant byte */
-        si7210_read_reg(dev, SI72XX_DSPSIGM, &val);
-    } while( (val & DSP_SIGM_DATA_FLAG) == 0);
+        if((rslt = si7210_read_reg(dev, SI72XX_DSPSIGM, &val)) == SI7210_OK)
+        {
+            if((val & DSP_SIGM_DATA_FLAG) == DSP_SIGM_DATA_FLAG)
+                break;
+        }
+        else
+            return rslt;
+
+        /* Wait 1ms until reading complete */
+        dev->delay_ms(10);
+        retries--;
+    };
+
+    /* Timeout error */
+    if((val & DSP_SIGM_DATA_FLAG) != DSP_SIGM_DATA_FLAG)
+        return SI7210_E_TIMEOUT;
     
     /*! ================================================== */
     /*! For calculations below, refer to Si7210 datasheet. */
@@ -222,7 +330,8 @@ si7210_status_t si7210_get_field_strength(struct si7210_dev *dev, si7210_range_t
     int32_t value = 256 * (val & DSP_SIGM_DATA_MASK);
 
     /* Read least-significant byte of data */
-    si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
+    if((rslt = si7210_read_reg(dev, SI72XX_DSPSIGL, &val)) != SI7210_OK)
+        return rslt;
         
     value += val;
     value -= 16384U;
@@ -236,7 +345,13 @@ si7210_status_t si7210_get_field_strength(struct si7210_dev *dev, si7210_range_t
     else
         rslt = SI7210_E_INVALID_ARG;
 
-error:
+
+    /* Set SW_OP and SW_LOW4FIELD */
+    rslt |= si7210_read_reg(dev, SI72XX_CTRL1, &val);
+
+    /* Set SW_HYST (Hysterisis) to 0 */
+    rslt |= si7210_read_reg(dev, SI72XX_CTRL2, &val);
+
     return rslt;
 }
 
@@ -244,7 +359,7 @@ error:
   * @brief This API gets the last measured temperature from the device.
   *        The value is correctly compensated.
   */
-si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperature)
+si7210_status_t si7210_get_temperature(si7210_dev_t *dev, float *temperature)
 {
     /* Temp variable used for register read values */
     uint8_t val = 0;
@@ -253,25 +368,45 @@ si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperatur
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
 
     /* Stop the control loop by setting stop bit */
-    si7210_write_reg(dev, SI72XX_POWER_CTRL, 0xF0, USESTORE_MASK | STOP_MASK);
+    rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK, USESTORE_MASK | STOP_MASK);
 
     /* Do not use burst measurement type */
-    si7210_write_reg(dev, SI72XX_CTRL4, 0, 0x0);
+    rslt |= si7210_write_reg(dev, SI72XX_CTRL4, 0, 0x0);
 
     /* Select temperature measurement */
-    si7210_write_reg(dev, SI72XX_DSPSIGSEL, 0, DSP_SIGSEL_TEMP_MASK);
+    rslt |= si7210_write_reg(dev, SI72XX_DSPSIGSEL, 0, DSP_SIGSEL_TEMP_MASK);
 
     /* Start measurement */
-    si7210_write_reg(dev, SI72XX_POWER_CTRL, 0xF0, USESTORE_MASK | ONEBURST_MASK);
+    rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK, USESTORE_MASK | ONEBURST_MASK);
+
+    /* Error configuring and starting measurement */
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
 
     /* Wait until measurement complete by checking fresh data bit */
-    do {
+    uint8_t retries = 5;
+    while(retries)
+    {
         /* Read most-significant byte */
-        si7210_read_reg(dev, SI72XX_DSPSIGM, &val);
-    } while( (val & DSP_SIGM_DATA_FLAG) == 0);
+        if((rslt = si7210_read_reg(dev, SI72XX_DSPSIGM, &val)) == SI7210_OK)
+        {
+            if((val & DSP_SIGM_DATA_FLAG) == DSP_SIGM_DATA_FLAG)
+                break;
+        }
+        else
+            return rslt;
+
+        /* Wait 1ms until reading complete */
+        dev->delay_ms(1);
+        retries--;
+    };
+
+    /* Timeout error */
+    if((val & DSP_SIGM_DATA_FLAG) != DSP_SIGM_DATA_FLAG)
+        return SI7210_E_TIMEOUT;
 
     /*! ================================================== */
     /*! For calculations below, refer to Si7210 datasheet. */
@@ -280,21 +415,27 @@ si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperatur
     int32_t value = 32 * (val & DSP_SIGM_DATA_MASK);
     
     /* Read the least-significant byte */
-    si7210_read_reg(dev, SI72XX_DSPSIGL, &val);
+    if((rslt = si7210_read_reg(dev, SI72XX_DSPSIGL, &val)) != SI7210_OK)
+        return rslt;
+
     value += (val >> 3);
 
     /* If no offset and gain values exist, read them now. */
     if (dev->calib_data.temp_offset == 0 && dev->calib_data.temp_gain == 0)
     {
         /* Read out compensation values */
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x1DU);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t*) &dev->calib_data.temp_offset);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x1DU);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t*) &dev->calib_data.temp_offset);
 
-        si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x1EU);
-        si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
-        si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t*) &dev->calib_data.temp_gain);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_ADDR, 0, 0x1EU);
+        rslt |= si7210_write_reg(dev, SI72XX_OTP_CTRL, 0, OTP_READ_EN_MASK);
+        rslt |= si7210_read_reg(dev, SI72XX_OTP_DATA, (uint8_t*) &dev->calib_data.temp_gain);
     }
+
+    /* Error reading OTP values */
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
 
     float temp_c = (float) value;
     float offset = dev->calib_data.temp_offset / 16.0;
@@ -304,42 +445,61 @@ si7210_status_t si7210_get_temperature(struct si7210_dev *dev, float *temperatur
 
     *temperature = temp_c;
 
-error:
     return rslt;
 }
 
+
+// si7210_enable_periodic_measurement(si7210_dev_t *dev);
+// si7210_disable_periodic_measurement(si7210_dev_t *dev);
+
+/*!
+ * @brief This API
+ */
+si7210_status_t si7210_enable_periodic_measurement(si7210_dev_t *dev)
+{
+    si7210_status_t rslt;
+
+    /* Check for null pointer in device structure */
+    if((rslt = null_ptr_check(dev)) != SI7210_OK)
+        return rslt;
+
+    /* Enable periodic wakeup */
+    if((rslt = si7210_write_reg(dev, SI72XX_CTRL3, ~SL_TIMEENA_MASK, SL_TIMEENA_MASK)) != SI7210_OK)
+        return rslt;
+
+    /* Start measurement */
+    /* Change to ~STOP_MASK with STOP_MASK */
+    if((rslt = i7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK | USESTORE_MASK, 0)) != SI7210_OK)
+        return rslt;
+
+    return rslt;
+}
 
 /*!
   * @brief This API sets the threshold triggering of the device.
   *        Whereby, the output pin of the device will trigger when the magnetic
   *        field exceeds a particular threshold.
   */
-si7210_status_t si7210_set_threshold(struct si7210_dev *dev, float threshold, si7210_range_t range, si7210_output_pin_t pin_state)
+si7210_status_t si7210_set_threshold(si7210_dev_t *dev, float threshold, si7210_range_t range, si7210_output_pin_t pin_state)
 {
     si7210_status_t rslt;
     uint8_t ctrl1 = 0;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
     
     if((pin_state != SI7210_OUTPUT_PIN_HIGH) && (pin_state != SI7210_OUTPUT_PIN_LOW) &&
        (range != SI7210_200mT) && (range != SI7210_20mT))
     {
-        rslt = SI7210_E_INVALID_ARG;
-        goto error;
+        return SI7210_E_INVALID_ARG;
     }
 
-    // /* Save OTP registers */
-    // si7210_write_reg(dev, SI72XX_POWER_CTRL, 0xF0, USESTORE_MASK);
-    // uint8_t val = 0;
-    // si7210_read_reg(dev, SI72XX_CTRL1, &val); // Read SW_OP
-    // si7210_read_reg(dev, SI72XX_CTRL2, &val); // Read SW_HYST
-    // si7210_read_reg(dev, SI72XX_CTRL3, &val); // Read SW_TAMPER
+    /* Stop the control state measurement loop */
+    /* Replace with ~STOP_MASK */
+    if((rslt = si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK | USESTORE_MASK, STOP_MASK)) != SI7210_OK)
+        return rslt;
     
-    si7210_write_reg(dev, SI72XX_CTRL2, 0, 63); // Set SW_HYST to 0
-    
-
     /* Set sw_low4field bit if output pin is in LOW configuration.
      * Clear sw_low4field bit if output is in HIGH configuration.*/
     switch(pin_state)
@@ -377,42 +537,56 @@ si7210_status_t si7210_set_threshold(struct si7210_dev *dev, float threshold, si
     ctrl1 |= (sw_op_3_0 & 0x0F) << 0;
     ctrl1 |= (sw_op_6_4 & 0x07) << 4;
 
-    // Set SW_OP and SW_LOW4FIELD
-    if((rslt = si7210_write_reg(dev, SI72XX_CTRL1, 0, ctrl1)) != SI7210_OK)
-       goto error;
+    /* Set SW_OP and SW_LOW4FIELD */
+    rslt |= si7210_write_reg(dev, SI72XX_CTRL1, 0, ctrl1);
+
+    /* Disable hysterisis by setting sw_hyst to 63 */
+    rslt |= si7210_write_reg(dev, SI72XX_CTRL2, 0, 63);
+
+    /* Disable tamper detection by setting sw_tamper to 63 */
+    rslt |= si7210_write_reg(dev, SI72XX_CTRL3, SL_FAST_MASK | SL_TIMEENA_MASK, 63 << 2);
     
-error:
+    /* Ensure the OTP data is not reloaded after each sleep cycle */
+    rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK, USESTORE_MASK | STOP_MASK);
+
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
+    
     return rslt;
 }
 
-void si7210_irq_handler(struct si7210_dev *dev)
-{
 
+/*!
+ * @brief This API should be called inside the ISR capturing the triggering
+ *        of the device's output pin.
+ *        This is required to support threshold trigger functionality.
+ */
+void si7210_irq_handler(si7210_dev_t *dev)
+{
+    dev->callback(dev);
 }
 
 /*!
   * @brief This API reads a register from Si7210 device.
   */
-si7210_status_t si7210_read_reg(struct si7210_dev *dev, uint8_t reg, uint8_t *val)
+si7210_status_t si7210_read_reg(si7210_dev_t *dev, uint8_t reg, uint8_t *val)
 {
     si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
 
     /* Call user implemented method for I2C read */
-    if((rslt = dev->read(dev->dev_id, reg, val, 1)) != SI7210_OK)
-        goto error;
+    rslt = dev->read(dev->dev_id, reg, val, 1);
 
-error:
     return rslt;
 }
 
 /*!
   * @brief This API writes a value to a register of Si7210 device.
   */
-si7210_status_t si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t mask, uint8_t val)
+si7210_status_t si7210_write_reg(si7210_dev_t *dev, uint8_t reg, uint8_t mask, uint8_t val)
 {
     si7210_status_t rslt;
 
@@ -420,14 +594,14 @@ si7210_status_t si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t ma
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
 
     /* A mask has been used, must read original value from register. */
     if(mask != 0)
     {
         /* Call user implemented method for I2C read */
         if((rslt = dev->read(dev->dev_id, reg, &temp_val, 1)) != SI7210_OK)
-        goto error;
+            return rslt;
 
         temp_val &= mask;
     }
@@ -436,9 +610,8 @@ si7210_status_t si7210_write_reg(struct si7210_dev *dev, uint8_t reg, uint8_t ma
 
     /* Call user implemented method for I2C write */
     if((rslt = dev->write(dev->dev_id, reg, &temp_val, 1)) != SI7210_OK)
-        goto error;
+        return rslt;
 
-error:
     return rslt;
 }
 
@@ -446,27 +619,25 @@ error:
 /*!
   * @brief This API checks the device is responding to commands.
   */
-si7210_status_t si7210_check(struct si7210_dev *dev)
+si7210_status_t si7210_check(si7210_dev_t *dev)
 {
     si7210_status_t rslt = SI7210_OK;
     uint8_t temp;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
     
     /* Read the device ID and revision fields to check comms. */
-    if((rslt = si7210_read_reg(dev, SI72XX_HREVID, &temp)) != SI7210_OK)
-        goto error;
+    rslt = si7210_read_reg(dev, SI72XX_HREVID, &temp);
 
-error:
     return rslt;
 }
 
 /*!
   * @brief This API puts the device into SLEEP mode.
  */
-si7210_status_t si7210_sleep(struct si7210_dev *dev)
+si7210_status_t si7210_sleep(si7210_dev_t *dev)
 {
     uint8_t temp;
 
@@ -474,50 +645,47 @@ si7210_status_t si7210_sleep(struct si7210_dev *dev)
     
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
     
     /* Read CTRL3 register */
-    if((rslt = si7210_read_reg(dev, SI72XX_CTRL3, &temp)) != SI7210_OK)
-        goto error;
+    rslt |= si7210_read_reg(dev, SI72XX_CTRL3, &temp);
      
     temp &= 0xFEU; /* Clear SLTIMENA bit of CTRL3 register */
     
     /* Write back new CTRL3 register value  */
-    if((rslt = si7210_write_reg(dev, SI72XX_CTRL3, 0, temp)) != SI7210_OK)
-        goto error;
+    rslt |= si7210_write_reg(dev, SI72XX_CTRL3, 0, temp);
 
     /* Read POWER_CTRL register */
-    if((rslt = si7210_read_reg(dev, SI72XX_POWER_CTRL, &temp)) != SI7210_OK)
-        goto error;
+    rslt |= si7210_read_reg(dev, SI72XX_POWER_CTRL, &temp);
     
     temp = (temp & 0xF8U) | 0x01; /* Clear STOP and set SLEEP bits */
     
     /* Write back POWER_CTRL register value */
-    if((rslt = si7210_write_reg(dev, SI72XX_POWER_CTRL, 0, temp)) != SI7210_OK)
-        goto error;
-        
-error:
+    rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK, temp);
+
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
+
     return rslt;
 }
 
 /*!
  * @brief This API wakes the device from SLEEP mode.
  */ 
-si7210_status_t si7210_wakeup(struct si7210_dev *dev)
+si7210_status_t si7210_wakeup(si7210_dev_t *dev)
 {
     uint8_t temp = 0;
     si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
 
     /* Wake the device up by sending a WRITE request. 
      * API call will fail as we are unable to write to memory address 0x00,
      * however it will wake the part up. */
     dev->write(dev->dev_id, 0x00, &temp, 1);
         
-error:
     return rslt;
 }
 
@@ -525,29 +693,33 @@ error:
  * @brief This API executes a self-test sequence offered by the device.
  *        It uses an internal coil to generate and test the + and - field.
  */
-si7210_status_t si7210_self_test(struct si7210_dev *dev)
+si7210_status_t si7210_self_test(si7210_dev_t *dev)
 {
     float field_pos, field_neg;
     si7210_status_t rslt;
 
     /* Check for null pointer in device structure */
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
-        goto error;
+        return rslt;
 
     /* Enable test field generator coil in POSITIVE direction. */
-    si7210_write_reg(dev, SI72XX_TM_FG, 0, 1);
+    rslt |= si7210_write_reg(dev, SI72XX_TM_FG, 0, 1);
 
     /* Measure field strength */
-    si7210_get_field_strength(dev, SI7210_200mT, &field_pos);
+    rslt |= si7210_get_field_strength(dev, SI7210_200mT, &field_pos);
 
     /* Enable test field generator coil in POSITIVE direction. */
-    si7210_write_reg(dev, SI72XX_TM_FG, 0, 2);
+    rslt |= si7210_write_reg(dev, SI72XX_TM_FG, 0, 2);
 
     /* Measure field strength */
-    si7210_get_field_strength(dev, SI7210_200mT, &field_neg);
+    rslt |= si7210_get_field_strength(dev, SI7210_200mT, &field_neg);
 
     /* Disable test field generator coil. */
-    si7210_write_reg(dev, SI72XX_TM_FG, 0, 0);
+    rslt |= si7210_write_reg(dev, SI72XX_TM_FG, 0, 0);
+
+    /* Error in performing self-test measurement. */
+    if(rslt != SI7210_OK)
+        return SI7210_E_IO;
 
     float b_out = 1.16 * SI7210_VDD;
     float b_upper = b_out + (b_out * 0.25); /* +25% */
@@ -565,7 +737,6 @@ si7210_status_t si7210_self_test(struct si7210_dev *dev)
         rslt = SI7210_E_SELF_TEST_FAIL;
     }
 
-error:
     return rslt;
 }
 
@@ -574,7 +745,7 @@ error:
  * @brief This internal API is used to validate the device pointer for
  * null conditions.
  */
-static si7210_status_t null_ptr_check(const struct si7210_dev *dev)
+static si7210_status_t null_ptr_check(const si7210_dev_t *dev)
 {
     si7210_status_t rslt;
 

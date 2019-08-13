@@ -56,35 +56,45 @@ extern "C" {
 /*!
  * @brief Si7210 API status result code.
  */
-typedef enum {
-    /* API Success codes */
-    SI7210_OK,
-    /* API Error codes */
-    SI7210_E_NULL_PTR,
-    SI7210_E_INVALID_ARG,
-    SI7210_E_IO,
-    SI7210_E_DEV_NOT_FOUND,
-    SI7210_E_SELF_TEST_FAIL,
-    /* API Warning codes */
-    SI7210_W_THRESHOLD_BOUNDS // Threshold out of bounds
+typedef enum
+{
+    SI7210_OK,                  /* Sucess                               */
+    SI7210_E_NULL_PTR,          /* Null pointer found                   */
+    SI7210_E_INVALID_ARG,       /* Invalid function arguments           */
+    SI7210_E_IO,                /* Device IO error                      */
+    SI7210_E_TIMEOUT,           /* Device timeout                       */
+    SI7210_E_DEV_NOT_FOUND,     /* Device not found                     */
+    SI7210_E_SELF_TEST_FAIL,    /* Device self-test failed              */
+    SI7210_E_SETTINGS,          /* Unable to set device settings        */
+    SI7210_W_THRESHOLD_BOUNDS   /* Threshold parameter outside bounds   */
 } si7210_status_t;
 
 /*!
  * @brief Measurement scale of reading.
  */
-typedef enum {
-    SI7210_20mT,
-    SI7210_200mT
+typedef enum
+{
+    SI7210_20mT,    /* 20mT measurement range */
+    SI7210_200mT    /* 200mT measurement range */
 } si7210_range_t;
+
+/*!
+ * @brief Magnet temperature compensation.
+ */
+typedef enum
+{
+    SI7210_COMPENSATION_NONE,     /* No magnet temperature compensation          */
+    SI7210_COMPENSATION_TEMP_NEO, /* Magnet temperature compensation (Neodymium) */
+    SI7210_COMPENSATION_TEMP_CER, /* Magnet temperature compensation (Ceramic)   */
+} si7210_compensation_t;
 
 /*!
  * @brief State of Si7210's output pin when field is above threshold setting.
  */
-typedef enum {
-    /* Output pin is LOW when the field is above threshold setting. */
-    SI7210_OUTPUT_PIN_LOW,
-    /* Ouput pin is HIGH when the field is above threshold setting. */
-    SI7210_OUTPUT_PIN_HIGH
+typedef enum
+{
+    SI7210_OUTPUT_PIN_LOW,  /* Output pin is LOW when field is above threshold.  */   
+    SI7210_OUTPUT_PIN_HIGH  /* Output pin is HIGH when field is above threshold. */
 } si7210_output_pin_t;
 
 /*!
@@ -95,40 +105,44 @@ typedef void (*si7210_delay_fptr_t)(uint32_t period);
 typedef void (*si7210_callback_fptr_t)(void *context);
 
 /*!
- * @brief Si7210 calibration data structure
+ * @brief Si7210 calibration data structure.
  */
-struct si7210_calib_data {
+struct si7210_calib_data
+{
+    int8_t temp_offset; /* Temperature sensor offset adjustment */   
+    int8_t temp_gain;   /* Temperature sensor gain adjustment */
+};
 
-    /* Temperature offset */
-    int8_t temp_offset;
-    
-    /* Temperature gain */
-    int8_t temp_gain;
+/*!
+ * @brief Si7210 settings data structure.
+ */
+struct si7210_settings
+{
+    si7210_range_t range;           /* Measurement range of magentic reading             */
+    si7210_compensation_t comp;     /* Temperature compensation of magentic reading      */
+    si7210_output_pin_t output_pin; /* State of output pin when field is above threshold */
 };
 
 /*!
  * @brief Si7210 sensor structure
  */
-struct si7210_dev {
-
-    /*! Device ID */
-    uint8_t dev_id;
+typedef struct
+{
+    uint8_t dev_id;                  /* Device ID                           */
+        
+    si7210_com_fptr_t read;          /* I2C Read function pointer           */
     
-    /*! I2C Read function pointer */
-    si7210_com_fptr_t read;
+    si7210_com_fptr_t write;         /* I2C Write function pointer          */
+    
+    si7210_delay_fptr_t delay_ms;    /* Delay (ms) function pointer         */
 
-    /*! I2C Write function pointer */
-    si7210_com_fptr_t write;
+    si7210_callback_fptr_t callback; /* Threshold callback function pointer */
+    
+    struct si7210_settings settings;      /* Si7210 device settings */
 
-    /*! Delay (ms) function pointer */
-    si7210_delay_fptr_t delay_ms;
+    struct si7210_calib_data calib_data;  /* Calibration data                    */
 
-    /*! Threshold callback function pointer */
-    si7210_callback_fptr_t callback;
-
-    /*! Calibration data */
-    struct si7210_calib_data calib_data;
-};
+} si7210_dev_t;
 
 #ifdef __cplusplus
 }
