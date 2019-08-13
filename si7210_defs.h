@@ -106,11 +106,13 @@ typedef void (*si7210_callback_fptr_t)(void *context);
 
 /*!
  * @brief Si7210 calibration data structure.
+ * 
+ * @note For use of internal driver, not user.
  */
 struct si7210_calib_data
 {
-    int8_t temp_offset; /* Temperature sensor offset adjustment */   
-    int8_t temp_gain;   /* Temperature sensor gain adjustment */
+    int8_t temperature_offset; /* Temperature sensor offset adjustment */   
+    int8_t temperature_gain;   /* Temperature sensor gain adjustment */
 };
 
 /*!
@@ -118,9 +120,9 @@ struct si7210_calib_data
  */
 struct si7210_settings
 {
-    si7210_range_t range;           /* Measurement range of magentic reading             */
-    si7210_compensation_t comp;     /* Temperature compensation of magentic reading      */
-    si7210_output_pin_t output_pin; /* State of output pin when field is above threshold */
+    si7210_range_t         range;        /* Measurement range of magentic reading             */
+    si7210_compensation_t  compensation; /* Temperature compensation of magentic reading      */
+    si7210_output_pin_t    output_pin;   /* State of output pin when field is above threshold */
 };
 
 /*!
@@ -128,19 +130,19 @@ struct si7210_settings
  */
 typedef struct
 {
-    uint8_t dev_id;                  /* Device ID                           */
+    uint8_t dev_id;                      /* Device ID                           */
         
-    si7210_com_fptr_t read;          /* I2C Read function pointer           */
+    si7210_com_fptr_t read;              /* I2C read function pointer           */
     
-    si7210_com_fptr_t write;         /* I2C Write function pointer          */
+    si7210_com_fptr_t write;             /* I2C write function pointer          */
     
-    si7210_delay_fptr_t delay_ms;    /* Delay (ms) function pointer         */
+    si7210_delay_fptr_t delay_ms;        /* Delay (ms) function pointer         */
 
-    si7210_callback_fptr_t callback; /* Threshold callback function pointer */
+    si7210_callback_fptr_t callback;     /* Threshold callback function pointer */
     
-    struct si7210_settings settings;      /* Si7210 device settings */
+    struct si7210_settings settings;     /* Si7210 device settings */
 
-    struct si7210_calib_data calib_data;  /* Calibration data                    */
+    struct si7210_calib_data calib_data; /* Calibration data                    */
 
 } si7210_dev_t;
 
