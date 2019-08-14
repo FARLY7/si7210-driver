@@ -35,6 +35,7 @@ struct si7210_dev dev = {
   .read = usr_i2c_read;
   .write = usr_i2c_write;
   .delay_ms = usr_delay_ms;
+  .callback = callback;
 };
 
 if((rslt = si7210_init(&dev) != SI7210_OK)
