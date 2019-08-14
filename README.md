@@ -1,5 +1,5 @@
 # Si7210 Hall-effect sensor driver API
-A simple driver for Silicon Lab's Si7210 hall-effect sensor.
+A portable driver written in C for Silicon Lab's Si7210 hall-effect sensor.
 
 
 ## Introduction
@@ -25,7 +25,7 @@ The driver includes si7210.c, si7210.h, and si7210_defs.h files.
 ## User Guide
 
 ### Initialising the device
-To intialise the device, the user must create a device structure. The user can do this by creating an instance of the structure si7210_dev. The user must then fill in the various parameters as shown below.
+To intialise the device, the user must create a device structure. The user can do this by creating an instance of the structure si7210_dev. The user must then fill in the various parameters as shown below to initialise the device. THe usermust then choose the particular settings they wish to use, by filling in the 'settings' member of the device struct.
 
 ``` c
 si7210_status rslt = SI7210_OK;
@@ -37,18 +37,28 @@ struct si7210_dev dev = {
   .delay_ms = usr_delay_ms;
 };
 
-rslt = si7210_init(&dev);
+if((rslt = si7210_init(&dev) != SI7210_OK)
+  return rslt;
+
+dev.settings.range        = SI7210_20mT;
+dev.settings.compensation = SI7210_COMPENSATION_TEMP_NEO;
+dev.settings.output_pin   = SI7210_OUTPUT_PIN_HIGH;
+ 
+if((rslt = si7210_set_sensor_settings(&dev)) != SI7210_OK)
+  return rslt;
 
 if(rslt == SI7210_OK)
 {
-  int32_t field_strength;
-  int64_t temperature;
+  float field;
+  float temperature;
   
   /* Obtain field strength reading from device */
-  si7210_get_field_strength(&dev, SI7210_200mT, &field_strength);
+  si7210_get_field_strength(&dev, &field_strength);
   
   /* Obtain a temperature reading from the device */
   si7210_get_temperature(&dev, &temperature);
+  
+  printf("Field: %fmT\tTemperature: %f*C", field, temperature);
 }
 ````
 
