@@ -152,6 +152,10 @@ si7210_status_t si7210_init(si7210_dev_t *dev)
     if((rslt = null_ptr_check(dev)) != SI7210_OK)
         return rslt;
 
+    /* Set callback as __weak implementation. */
+    if(dev->threshold_callback == NULL)
+        dev->threshold_callback = si7210_threshold_callback;
+
     /* Wake device up incase it is sleeping. */
     if((rslt = si7210_wakeup(dev)) != SI7210_OK)
         return rslt;
@@ -200,12 +204,8 @@ si7210_status_t si7210_deinit(si7210_dev_t *dev)
     /* Disable sleep timer */
     rslt |= si7210_write_reg(dev, SI72XX_CTRL3, (uint8_t) ~SL_TIMEENA_MASK, 0);
 
-    /* Put device into sleep mode with no measurements (sleep timer disabled) */
-    //rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, ~(SLEEP_MASK | STOP_MASK), SLEEP_MASK);
-
     /* Disable user store of values, and enter sleep mode with no measurements */
     rslt |= si7210_write_reg(dev, SI72XX_POWER_CTRL, MEAS_MASK, SLEEP_MASK);
-
 
     if(rslt != SI7210_OK)
         return SI7210_E_IO;
@@ -325,7 +325,6 @@ si7210_status_t si7210_get_field_strength(si7210_dev_t *dev, float *field)
         *field = raw_field * 0.0125; /* rawField * 12.5 */
     else
         rslt = SI7210_E_INVALID_ARG;
-
 
     /* Set SW_OP and SW_LOW4FIELD */
     rslt |= si7210_read_reg(dev, SI72XX_CTRL1, &val);
@@ -522,17 +521,6 @@ si7210_status_t si7210_set_threshold(si7210_dev_t *dev, float threshold)
     return rslt;
 }
 
-
-/*!
- * @brief This API should be called inside the ISR capturing the triggering
- *        of the device's output pin.
- *        This is required to support threshold trigger functionality.
- */
-void si7210_irq_handler(si7210_dev_t *dev)
-{
-    dev->callback(dev);
-}
-
 /*!
   * @brief This API reads a register from Si7210 device.
   */
@@ -581,7 +569,6 @@ si7210_status_t si7210_write_reg(si7210_dev_t *dev, uint8_t reg, uint8_t mask, u
 
     return rslt;
 }
-
 
 /*!
   * @brief This API checks the device is responding to commands.
@@ -707,6 +694,29 @@ si7210_status_t si7210_self_test(si7210_dev_t *dev)
     return rslt;
 }
 
+/*!
+ * @brief This API should be called inside the ISR capturing the triggering
+ *        of the device's output pin.
+ *        This is required to support threshold trigger functionality.
+ */
+void si7210_irq_handler(si7210_dev_t *dev)
+{
+    dev->threshold_callback(dev);
+}
+
+/*!
+ * @brief This function represents a placeholder for the callback called
+ *        by the driver in the event the output pin is triggered.
+ */
+__attribute__((weak)) void si7210_threshold_callback(si7210_dev_t *dev)
+{
+    /* Prevent unused argument(s) compilation warning */
+    (void)dev;
+
+    /* NOTE : This function should not be modified, when the callback is needed,
+              the si7210_threshold_callback should be implemented in the user file
+     */
+}
 
 /*!
  * @brief This internal API reads the factory programmed temperature

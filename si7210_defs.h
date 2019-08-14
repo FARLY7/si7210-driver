@@ -102,7 +102,7 @@ typedef enum
  */
 typedef si7210_status_t (*si7210_com_fptr_t)(uint8_t dev_id, uint8_t reg_addr, uint8_t *data, uint16_t len);
 typedef void (*si7210_delay_fptr_t)(uint32_t period);
-typedef void (*si7210_callback_fptr_t)(void *context);
+//typedef void (*si7210_callback_fptr_t)(void *context);
 
 /*!
  * @brief Si7210 calibration data structure.
@@ -128,7 +128,7 @@ struct si7210_settings
 /*!
  * @brief Si7210 sensor structure
  */
-typedef struct
+typedef struct _si7210_dev_t
 {
     uint8_t dev_id;                      /* Device ID                           */
         
@@ -138,7 +138,9 @@ typedef struct
     
     si7210_delay_fptr_t delay_ms;        /* Delay (ms) function pointer         */
 
-    si7210_callback_fptr_t callback;     /* Threshold callback function pointer */
+    void (* threshold_callback)(struct _si7210_dev_t *dev);             /*!< SPI Tx Completed callback          */
+
+    //si7210_callback_fptr_t callback;     /* Threshold callback function pointer */
     
     struct si7210_settings settings;     /* Si7210 device settings */
 

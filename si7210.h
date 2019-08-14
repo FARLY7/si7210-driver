@@ -203,6 +203,16 @@ si7210_status_t si7210_sleep(si7210_dev_t *dev);
 si7210_status_t si7210_wakeup(si7210_dev_t *dev);
 
 /*!
+ * @brief This API offers a callback which is triggered whenever the output
+ *        pin triggers an interrupt.
+ * 
+ * @param[in] dev : Pointer to device structure.
+ * 
+ * @return void
+ */
+void si7210_threshold_callback(si7210_dev_t *dev);
+
+/*!
  * @brief This API should be called inside the ISR capturing the triggering
  *        of the device's output pin.
  *        This is required to support threshold trigger functionality.
