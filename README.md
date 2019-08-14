@@ -31,35 +31,35 @@ To intialise the device, the user must create a device structure. The user can d
 si7210_status rslt = SI7210_OK;
 
 struct si7210_dev dev = {
-  .dev_id = SI7210_ADDRESS_0;
-  .read = usr_i2c_read;
-  .write = usr_i2c_write;
-  .delay_ms = usr_delay_ms;
-  .callback = callback;
+    .dev_id   = SI7210_ADDRESS_0;
+    .read     = usr_i2c_read;
+    .write    = usr_i2c_write;
+    .delay_ms = usr_delay_ms;
+    .callback = callback;
 };
 
 if((rslt = si7210_init(&dev) != SI7210_OK)
-  return rslt;
+    return rslt;
 
 dev.settings.range        = SI7210_20mT;
 dev.settings.compensation = SI7210_COMPENSATION_TEMP_NEO;
 dev.settings.output_pin   = SI7210_OUTPUT_PIN_HIGH;
  
 if((rslt = si7210_set_sensor_settings(&dev)) != SI7210_OK)
-  return rslt;
+    return rslt;
 
 if(rslt == SI7210_OK)
 {
-  float field;
-  float temperature;
-  
-  /* Obtain field strength reading from device */
-  si7210_get_field_strength(&dev, &field_strength);
-  
-  /* Obtain a temperature reading from the device */
-  si7210_get_temperature(&dev, &temperature);
-  
-  printf("Field: %fmT\tTemperature: %f*C", field, temperature);
+    float field;
+    float temperature;
+
+    /* Obtain field strength reading from device */
+    si7210_get_field_strength(&dev, &field_strength);
+
+    /* Obtain a temperature reading from the device */
+    si7210_get_temperature(&dev, &temperature);
+
+    printf("Field: %fmT\tTemperature: %f*C", field, temperature);
 }
 ````
 
@@ -67,25 +67,25 @@ if(rslt == SI7210_OK)
 ``` c
 si7210_status usr_i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *data, uint16_t len)
 {
-  si7210_status rslt = SI7210_OK;
-  
-  /* User implemented I2C read function */
-  
-  return rslt;
+    si7210_status rslt = SI7210_OK;
+
+    /* User implemented I2C read function */
+
+    return rslt;
 }
 
 si7210_status usr_i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *data, uint16_t len)
 {
-  si7210_status rslt = SI7210_OK;
-  
-  /* User implemented I2C write function */
-  
-  return rslt;
+    si7210_status rslt = SI7210_OK;
+
+    /* User implemented I2C write function */
+
+    return rslt;
 }
 
 void usr_delay_ms(uint32_t period_ms)
 {
-  /* User implemented delay (ms) function */
+    /* User implemented delay (ms) function */
 }
 
 ```
